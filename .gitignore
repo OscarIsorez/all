@@ -1,0 +1,11 @@
+*.txt
+*.xz
+*.gz
+*.tar
+*.tar.xz
+*.tar.gz
+*.csv
+*.json
+*.xlsx
+
+
