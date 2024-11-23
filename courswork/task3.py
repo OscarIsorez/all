@@ -66,7 +66,7 @@ stacking_model = StackingClassifier(
 )
 
 # Prepare data for training
-X = data.drop("status", axis=1)  # Replace 'target' with your target column
+X = data.drop("status", axis=1)  
 y = data["status"]
 
 # Train-Test Split
