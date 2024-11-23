@@ -5,6 +5,7 @@ from Bio import Align
 import numpy as np
 import igraph as ig
 import matplotlib.pyplot as plt
+import pandas as pd
 
 # Extract the dataset
 file_path = "data/sequences.txt.xz"
@@ -55,8 +56,20 @@ else:
 
     print(f"Graph created with {graph.vcount()} nodes and {graph.ecount()} edges.")
 
+    # Visualize the network
     layout = graph.layout("fr")  # Fruchterman-Reingold layout
-    ig.plot(graph, layout=layout, vertex_label=None, vertex_size=10, edge_width=0.5)
+    fig, ax = plt.subplots(figsize=(10, 10))
+    ig.plot(
+        graph,
+        layout=layout,
+        target=ax,
+        vertex_label=None,
+        vertex_size=10,
+        edge_width=0.5,
+        vertex_color="blue",
+        edge_color="gray"
+    )
+    plt.title("Network Visualization")
     plt.show()
 
     # Compute network statistics
@@ -69,6 +82,21 @@ else:
     }
     print(statistics)
 
+    # Create a DataFrame for the statistics
+    stats_df = pd.DataFrame(list(statistics.items()), columns=["Property", "Value"])
+    print(stats_df)
+
+    # Display the statistics as a table
+    fig, ax = plt.subplots(figsize=(8, 4))
+    ax.axis('tight')
+    ax.axis('off')
+    table = ax.table(cellText=stats_df.values, colLabels=stats_df.columns, cellLoc='center', loc='center')
+    table.auto_set_font_size(False)
+    table.set_fontsize(12)
+    table.scale(1.2, 1.2)
+    plt.title("Network Topological Properties")
+    plt.show()
+
     # Detect communities
     clusters = graph.community_multilevel()
     graph.vs["cluster"] = clusters.membership
@@ -78,4 +106,16 @@ else:
     graph.vs["color"] = [palette[cluster] for cluster in clusters.membership]
 
     # Visualize the network with clusters
-    ig.plot(graph, layout=layout, vertex_size=10, edge_width=0.5)
+    fig, ax = plt.subplots(figsize=(10, 10))
+    ig.plot(
+        graph,
+        layout=layout,
+        target=ax,
+        vertex_label=None,
+        vertex_size=10,
+        edge_width=0.5,
+        vertex_color=graph.vs["color"],
+        edge_color="gray"
+    )
+    plt.title("Network Visualization with Clusters")
+    plt.show()
