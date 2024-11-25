@@ -7,7 +7,6 @@ import igraph as ig
 import matplotlib.pyplot as plt
 import pandas as pd
 
-# Extract the dataset
 file_path = "data/sequences.txt.xz"
 sequences = []
 
@@ -67,7 +66,7 @@ else:
         vertex_size=10,
         edge_width=0.5,
         vertex_color="blue",
-        edge_color="gray"
+        edge_color="gray",
     )
     plt.title("Network Visualization")
     plt.show()
@@ -88,9 +87,14 @@ else:
 
     # Display the statistics as a table
     fig, ax = plt.subplots(figsize=(8, 4))
-    ax.axis('tight')
-    ax.axis('off')
-    table = ax.table(cellText=stats_df.values, colLabels=stats_df.columns, cellLoc='center', loc='center')
+    ax.axis("tight")
+    ax.axis("off")
+    table = ax.table(
+        cellText=stats_df.values,
+        colLabels=stats_df.columns,
+        cellLoc="center",
+        loc="center",
+    )
     table.auto_set_font_size(False)
     table.set_fontsize(12)
     table.scale(1.2, 1.2)
@@ -115,7 +119,7 @@ else:
         vertex_size=10,
         edge_width=0.5,
         vertex_color=graph.vs["color"],
-        edge_color="gray"
+        edge_color="gray",
     )
     plt.title("Network Visualization with Clusters")
     plt.show()
