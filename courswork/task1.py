@@ -25,11 +25,9 @@ if not sequences:
 else:
     print(f"Loaded {len(sequences)} sequences.")
 
-    # Initialize the aligner
     aligner = Align.PairwiseAligner()
-    aligner.mode = "global"
+    aligner.mode = "local"
 
-    # Compute the pairwise distance matrix
     num_sequences = len(sequences)
     distance_matrix = np.zeros((num_sequences, num_sequences))
 
@@ -38,10 +36,7 @@ else:
             score = aligner.score(str(sequences[i].seq), str(sequences[j].seq))
             distance_matrix[i, j] = distance_matrix[j, i] = -score
 
-    print("Pairwise distance matrix computed.")
-
-    # Define a threshold for edge creation
-    threshold = -5  # Example value; adjust based on data
+    threshold = 0.5 * distance_matrix.max()
     edges = [
         (i, j)
         for i in range(num_sequences)
@@ -55,8 +50,7 @@ else:
 
     print(f"Graph created with {graph.vcount()} nodes and {graph.ecount()} edges.")
 
-    # Visualize the network
-    layout = graph.layout("fr")  # Fruchterman-Reingold layout
+    layout = graph.layout("fr")
     fig, ax = plt.subplots(figsize=(10, 10))
     ig.plot(
         graph,
@@ -71,7 +65,6 @@ else:
     plt.title("Network Visualization")
     plt.show()
 
-    # Compute network statistics
     statistics = {
         "Number of Nodes": graph.vcount(),
         "Number of Edges": graph.ecount(),
@@ -81,11 +74,9 @@ else:
     }
     print(statistics)
 
-    # Create a DataFrame for the statistics
     stats_df = pd.DataFrame(list(statistics.items()), columns=["Property", "Value"])
     print(stats_df)
 
-    # Display the statistics as a table
     fig, ax = plt.subplots(figsize=(8, 4))
     ax.axis("tight")
     ax.axis("off")
@@ -101,15 +92,12 @@ else:
     plt.title("Network Topological Properties")
     plt.show()
 
-    # Detect communities
     clusters = graph.community_multilevel()
     graph.vs["cluster"] = clusters.membership
 
-    # Color the nodes based on cluster membership
     palette = ig.drawing.colors.ClusterColoringPalette(len(clusters))
     graph.vs["color"] = [palette[cluster] for cluster in clusters.membership]
 
-    # Visualize the network with clusters
     fig, ax = plt.subplots(figsize=(10, 10))
     ig.plot(
         graph,
