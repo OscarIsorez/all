@@ -1,27 +1,22 @@
 import pandas as pd
 import matplotlib.pyplot as plt
-from sklearn.discriminant_analysis import StandardScaler
 from sklearn.ensemble import StackingClassifier
-from sklearn.metrics import classification_report
-from sklearn.model_selection import train_test_split
+from sklearn.metrics import classification_report, precision_recall_curve, auc
+from sklearn.model_selection import train_test_split, StratifiedKFold
 from sklearn.linear_model import LogisticRegression
-from sklearn.preprocessing import OneHotEncoder
-from sklearn.linear_model import LogisticRegression
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.pipeline import make_pipeline
 from sklearn.compose import ColumnTransformer
-from sklearn.preprocessing import OneHotEncoder, StandardScaler
+import numpy as np
 
-# Load data
 appointment = pd.read_csv("data/appointments/appointments.txt", sep=r"\s+")
 participants = pd.read_csv("data/appointments/participants.txt", sep=r"\s+")
 
-# Merge data
 data = pd.merge(appointment, participants, on="participant")
 data = data[data["count"] > 5]
 
-# Define categorical and numerical columns
 categorical_cols = [
     "participant",
     "sms_received",
@@ -36,11 +31,9 @@ categorical_cols = [
 
 numerical_cols = ["advance", "age", "count"]
 
-# Define transformers
 categorical_transformer = OneHotEncoder(handle_unknown='ignore')
 numerical_transformer = StandardScaler()
 
-# Define preprocessor
 preprocessor = ColumnTransformer(
     transformers=[
         ("num", numerical_transformer, numerical_cols),
@@ -49,12 +42,10 @@ preprocessor = ColumnTransformer(
     remainder="passthrough",
 )
 
-# Define Base Models
 logistic_regression = make_pipeline(preprocessor, LogisticRegression(max_iter=10000, random_state=42))
 nearest_neighbors = make_pipeline(preprocessor, KNeighborsClassifier())
 decision_tree = make_pipeline(preprocessor, DecisionTreeClassifier())
 
-# Define Stacking Model
 stacking_model = StackingClassifier(
     estimators=[
         ('log_reg', logistic_regression),
@@ -62,20 +53,16 @@ stacking_model = StackingClassifier(
         ('decision_tree', decision_tree)
     ],
     final_estimator=LogisticRegression(max_iter=10000, random_state=42),  # Meta-model
-    cv=5  # Cross-validation for meta-model
+    cv=5  
 )
 
-# Prepare data for training
-X = data.drop("status", axis=1)  
+X = data.drop("status", axis=1)  # Replace 'status' with your target column
 y = data["status"]
 
-# Train-Test Split
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
 
-# Fit Stacking Model
 stacking_model.fit(X_train, y_train)
 
-# Evaluate Models
 models = {'Logistic Regression': logistic_regression,
           'Nearest Neighbors': nearest_neighbors,
           'Decision Tree': decision_tree,
@@ -88,3 +75,27 @@ for name, model in models.items():
     print(f"Performance of {name}:")
     print(classification_report(y_test, y_pred))
     print("-" * 50)
+
+y_binary = y.map({'fullfilled': 1, 'no-show': 0})
+
+cv = StratifiedKFold(n_splits=5)
+precision_list = []
+recall_list = []
+for train_idx, test_idx in cv.split(X, y_binary):
+    X_train_fold, X_test_fold = X.iloc[train_idx], X.iloc[test_idx]
+    y_train_fold, y_test_fold = y_binary.iloc[train_idx], y_binary.iloc[test_idx]
+    stacking_model.fit(X_train_fold, y_train_fold)
+    y_pred_prob = stacking_model.predict_proba(X_test_fold)[:, 1]
+    precision, recall, _ = precision_recall_curve(y_test_fold, y_pred_prob, pos_label=1)
+    precision_list.append(precision)
+    recall_list.append(recall)
+
+plt.figure(figsize=(10, 6))
+for i in range(len(precision_list)):
+    plt.plot(recall_list[i], precision_list[i], lw=2, label=f'Fold {i+1}')
+plt.xlabel('Recall')
+plt.ylabel('Precision') 
+plt.legend()
+plt.title('Precision-Recall Curve for Stacking Model')
+plt.savefig("results/t3_precision_recall_curve.png")
+# plt.show()
