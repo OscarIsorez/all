@@ -72,8 +72,13 @@ def plot_missing_values_initial():
         ax.set_title(f"Visit {i+1}")
 
     plt.tight_layout()
+    plt.suptitle("Missing Values in Each Visit")
+    plt.savefig("results/t2_missing_values_initial.png")
     plt.show()
     plt.close()
+
+
+plot_missing_values_initial()
 
 
 # Impute missing for SES in visit 1
@@ -97,20 +102,7 @@ visit1["CDR"] = visit1["CDR"].map(
     }
 )
 
-""" - patient ID
-- MRI exam ID
-- visit
-- age
-- sex: M/F
-- hand: R/L
-- delay: MR delay time
-- YOE: years of education
-- SES: socioeconomic status (5 categories)
-- MMSE: Mini Mental State Examination (0-30 points)
-- CDR: Clinical Dementia Rating (none, very mild, mild, moderate, severe)
-- eTIV: estimated Total Intracranial Volume
-- nWBV: normalised Whole Brain Volume
-- ASF: Atlas Scaling Factor """
+
 categorical_columns = ["ID", "MRI_ID", "sex", "hand", "SES", "CDR"]
 for col in categorical_columns:
     visit1[col] = visit1[col].astype("category")
@@ -118,37 +110,33 @@ for col in categorical_columns:
 # get_infos(1)
 
 
-# Plot the distribution of the target variable
-
-
 def plot_target_distribution():
     plt.figure(figsize=(6, 4))
     sns.countplot(x="CDR", data=visit1)
     plt.xlabel("CDR")
     plt.ylabel("Count")
+
+    plt.savefig("results/t2_CDR_distribution.png")
     plt.show()
     plt.close()
 
 
+plot_target_distribution()
+
 visit1_cleaned = visit1
 
-# Keep only ID and CDR for follow-up visits
 visit2_cleaned = visit2[["ID", "CDR"]].rename(columns={"CDR": "cdr_visit2"})
 visit3_cleaned = visit3[["ID", "CDR"]].rename(columns={"CDR": "cdr_visit3"})
 visit4_cleaned = visit4[["ID", "CDR"]].rename(columns={"CDR": "cdr_visit4"})
 
-# # Merge datasets on 'id'
 merged_data = visit1_cleaned.merge(visit2_cleaned, on="ID", how="left")
 merged_data = merged_data.merge(visit3_cleaned, on="ID", how="left")
 merged_data = merged_data.merge(visit4_cleaned, on="ID", how="left")
 
 
-# rename CDR in visit 1 to CDR_visit1
-
 merged_data = merged_data.rename(columns={"CDR": "cdr_visit1"})
 
 
-# transform the cdr columns to categorical
 cdr_columns = ["cdr_visit1", "cdr_visit2", "cdr_visit3", "cdr_visit4"]
 for col in cdr_columns[1:]:
     merged_data[col] = merged_data[col].map(
@@ -165,26 +153,17 @@ for col in cdr_columns[1:]:
     merged_data[col] = merged_data[col].astype("category")
 
 
-# plot the missing values for the cdr columns
-def plot_missing_values_cdr():
-
-    fig, axes = plt.subplots(1, 3, figsize=(12, 4))
-    for i, col in enumerate(cdr_columns):
-        ax = axes[i]
-        merged_data[col].isnull().value_counts().plot(kind="bar", ax=ax)
-        ax.set_title(f"{col}")
-    plt.tight_layout()
-    plt.show()
-    plt.close()
-
-
 def plot_corr_matrix_merged_data():
     plt.figure(figsize=(10, 8))
     merged_data_without_MRI = merged_data.drop(columns=["MRI_ID"])
     sns.heatmap(merged_data_without_MRI.corr(), annot=True, cmap="coolwarm", fmt=".2f")
     plt.title("Correlation Matrix")
+    plt.savefig("results/t2_correlation_matrix.png")
     plt.show()
     plt.close()
+
+
+plot_corr_matrix_merged_data()
 
 
 merged_data = merged_data.drop(columns=["MRI_ID"])
@@ -203,10 +182,13 @@ def plot_disease_progression():
     plt.xlabel("Visits")
     plt.ylabel("Mean CDR Score")
     plt.grid(True)
+    plt.savefig("results/t2_disease_progression.png")
     plt.show()
 
 
-# Define the columns with missing values
+plot_disease_progression()
+
+
 cdr_columns = ["cdr_visit2", "cdr_visit3", "cdr_visit4"]
 
 # Prepare the data
@@ -246,13 +228,18 @@ print(
 
 
 def train_and_evaluate_logistic_regression(penalty):
-    log_reg = LogisticRegression(max_iter=10000, random_state=42,solver="liblinear", penalty=penalty)
+    log_reg = LogisticRegression(
+        max_iter=10000, random_state=42, solver="liblinear", penalty=penalty
+    )
     pipeline = Pipeline(steps=[("preprocessor", preprocessor), ("classifier", log_reg)])
     scores = cross_val_score(pipeline, X_train, y_train, cv=5, scoring="accuracy")
     mean_score = scores.mean()
     confidence_interval = sem(scores) * 1.96
     print(f"Mean accuracy ({penalty}): {mean_score:.2f} +/- {confidence_interval:.2f}")
-    print(f"95% confidence interval: {mean_score - confidence_interval:.2f} - {mean_score + confidence_interval:.2f}")
+    print(
+        f"95% confidence interval: {mean_score - confidence_interval:.2f} - {mean_score + confidence_interval:.2f}"
+    )
+
 
 train_and_evaluate_logistic_regression("l1")
 train_and_evaluate_logistic_regression("l2")
