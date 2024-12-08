@@ -81,7 +81,6 @@ def plot_missing_values_initial():
 plot_missing_values_initial()
 
 
-# Impute missing for SES in visit 1
 visit1["SES"] = visit1["SES"].fillna(visit1["SES"].median())
 visit1["sex"] = visit1["sex"].map({"F": 0, "M": 1})
 visit1["hand"] = visit1["hand"].map({"R": 0, "L": 1})
@@ -191,16 +190,13 @@ plot_disease_progression()
 
 cdr_columns = ["cdr_visit2", "cdr_visit3", "cdr_visit4"]
 
-# Prepare the data
 y = merged_data["cdr_visit1"]
 X = merged_data.drop(columns=["cdr_visit1", "ID"])
 
-# Split the data into training and testing sets
 X_train, X_test, y_train, y_test = train_test_split(
     X, y, test_size=0.2, random_state=42
 )
 
-# Create a pipeline for handling missing values
 missing_indicator = MissingIndicator(features="missing-only")
 imputer = SimpleImputer(strategy="most_frequent")
 
@@ -214,7 +210,6 @@ preprocessor = ColumnTransformer(
 
 log_reg = LogisticRegression(max_iter=10000, random_state=42)
 
-# Create a pipeline with the preprocessor and the logistic regression model
 pipeline = Pipeline(steps=[("preprocessor", preprocessor), ("classifier", log_reg)])
 
 scores = cross_val_score(pipeline, X_train, y_train, cv=5, scoring="accuracy")
@@ -239,7 +234,57 @@ def train_and_evaluate_logistic_regression(penalty):
     print(
         f"95% confidence interval: {mean_score - confidence_interval:.2f} - {mean_score + confidence_interval:.2f}"
     )
+    plot_learning_performance(pipeline, X_train, y_train, penalty)
 
 
+def plot_learning_performance(pipeline, X_train, y_train, penalty):
+    """ learning performance of the logistic regression without regularisation (mean + 95% CI)
+ """
+    train_sizes, train_scores, test_scores = learning_curve(
+        pipeline, X_train, y_train, train_sizes=np.linspace(0.1, 1.0, 10), cv=5
+    )
+
+    train_scores_mean = np.mean(train_scores, axis=1)
+    train_scores_std = np.std(train_scores, axis=1)
+    test_scores_mean = np.mean(test_scores, axis=1)
+    test_scores_std = np.std(test_scores, axis=1)
+
+    plt.figure(figsize=(8, 6))
+    plt.fill_between(
+        train_sizes,
+        train_scores_mean - train_scores_std,
+        train_scores_mean + train_scores_std,
+        alpha=0.1,
+        color="r",
+    )
+    plt.fill_between(
+        train_sizes,
+        test_scores_mean - test_scores_std,
+        test_scores_mean + test_scores_std,
+        alpha=0.1,
+        color="g",
+    )
+    plt.plot(
+        train_sizes,
+        train_scores_mean,
+        color="r",
+        label="Training score",
+        marker="o",
+        linestyle="-",
+    )
+    plt.plot(
+        train_sizes,
+        test_scores_mean,
+        color="g",
+        label="Cross-validation score",
+        marker="o",
+        linestyle="-",
+    )
+    plt.xlabel("Training examples")
+    plt.ylabel("Accuracy")
+    plt.title(f"Learning Performance ({penalty})")
+    plt.legend(loc="best")
+    plt.savefig(f"results/t2_learning_performance_{penalty}.png")
+    plt.show()
 train_and_evaluate_logistic_regression("l1")
 train_and_evaluate_logistic_regression("l2")
