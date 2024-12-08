@@ -3,7 +3,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, classification_report
-from sklearn.model_selection import cross_val_score, train_test_split
+from sklearn.model_selection import cross_val_score, learning_curve, train_test_split
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import roc_auc_score
 from sklearn.utils import resample
@@ -74,7 +74,7 @@ def plot_missing_values_initial():
     plt.tight_layout()
     plt.suptitle("Missing Values in Each Visit")
     plt.savefig("results/t2_missing_values_initial.png")
-    plt.show()
+    # plt.show()
     plt.close()
 
 
@@ -116,7 +116,7 @@ def plot_target_distribution():
     plt.ylabel("Count")
 
     plt.savefig("results/t2_CDR_distribution.png")
-    plt.show()
+    # plt.show()
     plt.close()
 
 
@@ -158,7 +158,7 @@ def plot_corr_matrix_merged_data():
     sns.heatmap(merged_data_without_MRI.corr(), annot=True, cmap="coolwarm", fmt=".2f")
     plt.title("Correlation Matrix")
     plt.savefig("results/t2_correlation_matrix.png")
-    plt.show()
+    # plt.show()
     plt.close()
 
 
@@ -182,7 +182,7 @@ def plot_disease_progression():
     plt.ylabel("Mean CDR Score")
     plt.grid(True)
     plt.savefig("results/t2_disease_progression.png")
-    plt.show()
+    # plt.show()
 
 
 plot_disease_progression()
