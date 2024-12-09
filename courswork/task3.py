@@ -1,101 +1,109 @@
 import pandas as pd
-import matplotlib.pyplot as plt
-from sklearn.ensemble import StackingClassifier
-from sklearn.metrics import classification_report, precision_recall_curve, auc
-from sklearn.model_selection import train_test_split, StratifiedKFold
-from sklearn.linear_model import LogisticRegression
-from sklearn.preprocessing import OneHotEncoder, StandardScaler
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.tree import DecisionTreeClassifier
-from sklearn.pipeline import make_pipeline
-from sklearn.compose import ColumnTransformer
 import numpy as np
+from sklearn.model_selection import train_test_split, StratifiedKFold, learning_curve
+from sklearn.pipeline import Pipeline
+from sklearn.compose import ColumnTransformer
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.impute import SimpleImputer
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import classification_report, confusion_matrix, precision_recall_curve, auc
+import matplotlib.pyplot as plt
+import seaborn as sns
+import shap
 
-appointment = pd.read_csv("data/appointments/appointments.txt", sep=r"\s+")
+# Load data
+appointments = pd.read_csv("data/appointments/appointments.txt", sep=r"\s+")
 participants = pd.read_csv("data/appointments/participants.txt", sep=r"\s+")
 
-data = pd.merge(appointment, participants, on="participant")
-data = data[data["count"] > 5]
+# Merge datasets
+data = appointments.merge(participants, on="participant")
 
-categorical_cols = [
-    "participant",
-    "sms_received",
-    "day",
-    "month",
-    "weekday",
-    "sex",
-    "hipertension",
-    "diabetes",
-    "alcoholism",
-]
+# Filter patients with at least 5 appointments
+data = data[data["count"] >= 5]
 
-numerical_cols = ["advance", "age", "count"]
+# Target and features
+X = data.drop(columns=["status", "participant"])
+y = (data["status"] == "no-show").astype(int)
 
-categorical_transformer = OneHotEncoder(handle_unknown='ignore')
-numerical_transformer = StandardScaler()
+# Preprocessing pipeline
+numeric_features = ["age", "advance", "day", "month"]
+categorical_features = ["sms_received", "sex", "hipertension", "diabetes", "alcoholism", "weekday"]
+
+numeric_transformer = Pipeline(steps=[
+    ("imputer", SimpleImputer(strategy="mean")),
+    ("scaler", StandardScaler())
+])
+
+categorical_transformer = Pipeline(steps=[
+    ("imputer", SimpleImputer(strategy="most_frequent")),
+    ("onehot", OneHotEncoder(handle_unknown="ignore"))
+])
 
 preprocessor = ColumnTransformer(
     transformers=[
-        ("num", numerical_transformer, numerical_cols),
-        ("cat", categorical_transformer, categorical_cols),
-    ],
-    remainder="passthrough",
+        ("num", numeric_transformer, numeric_features),
+        ("cat", categorical_transformer, categorical_features)
+    ]
 )
 
-logistic_regression = make_pipeline(preprocessor, LogisticRegression(max_iter=10000, random_state=42))
-nearest_neighbors = make_pipeline(preprocessor, KNeighborsClassifier())
-decision_tree = make_pipeline(preprocessor, DecisionTreeClassifier())
+# Define model pipeline
+model = Pipeline(steps=[
+    ("preprocessor", preprocessor),
+    ("classifier", RandomForestClassifier(random_state=42, n_estimators=100, class_weight="balanced"))
+])
 
-stacking_model = StackingClassifier(
-    estimators=[
-        ('log_reg', logistic_regression),
-        ('knn', nearest_neighbors),
-        ('decision_tree', decision_tree)
-    ],
-    final_estimator=LogisticRegression(max_iter=10000, random_state=42),  # Meta-model
-    cv=5  
-)
+# Train-test split
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, stratify=y, random_state=42)
 
-X = data.drop("status", axis=1)  # Replace 'status' with your target column
-y = data["status"]
+# Fit model
+model.fit(X_train, y_train)
 
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
+# Evaluate model
+y_pred = model.predict(X_test)
+print(classification_report(y_test, y_pred))
 
-stacking_model.fit(X_train, y_train)
+# Plot precision-recall curve
+y_proba = model.predict_proba(X_test)[:, 1]
+precision, recall, thresholds = precision_recall_curve(y_test, y_proba)
+pr_auc = auc(recall, precision)
 
-models = {'Logistic Regression': logistic_regression,
-          'Nearest Neighbors': nearest_neighbors,
-          'Decision Tree': decision_tree,
-          'Stacking Model': stacking_model}
-
-for name, model in models.items():
-    if name != 'Stacking Model':
-        model.fit(X_train, y_train)  # Fit base models independently
-    y_pred = model.predict(X_test)
-    print(f"Performance of {name}:")
-    print(classification_report(y_test, y_pred))
-    print("-" * 50)
-
-y_binary = y.map({'fullfilled': 1, 'no-show': 0})
-
-cv = StratifiedKFold(n_splits=5)
-precision_list = []
-recall_list = []
-for train_idx, test_idx in cv.split(X, y_binary):
-    X_train_fold, X_test_fold = X.iloc[train_idx], X.iloc[test_idx]
-    y_train_fold, y_test_fold = y_binary.iloc[train_idx], y_binary.iloc[test_idx]
-    stacking_model.fit(X_train_fold, y_train_fold)
-    y_pred_prob = stacking_model.predict_proba(X_test_fold)[:, 1]
-    precision, recall, _ = precision_recall_curve(y_test_fold, y_pred_prob, pos_label=1)
-    precision_list.append(precision)
-    recall_list.append(recall)
-
-plt.figure(figsize=(10, 6))
-for i in range(len(precision_list)):
-    plt.plot(recall_list[i], precision_list[i], lw=2, label=f'Fold {i+1}')
-plt.xlabel('Recall')
-plt.ylabel('Precision') 
+plt.figure()
+plt.plot(recall, precision, label=f"PR AUC = {pr_auc:.2f}")
+plt.xlabel("Recall")
+plt.ylabel("Precision")
+plt.title("Precision-Recall Curve")
 plt.legend()
-plt.title('Precision-Recall Curve for Stacking Model')
-plt.savefig("results/t3_precision_recall_curve.png")
-# plt.show()
+plt.show()
+
+# Plot confusion matrix
+cm = confusion_matrix(y_test, y_pred)
+sns.heatmap(cm, annot=True, fmt="d", cmap="Blues", xticklabels=["Fullfilled", "No-show"], yticklabels=["Fullfilled", "No-show"])
+plt.title("Confusion Matrix")
+plt.ylabel("Actual")
+plt.xlabel("Predicted")
+plt.show()
+
+# Feature importance using SHAP
+rf = model.named_steps["classifier"]
+X_test_transformed = model.named_steps["preprocessor"].transform(X_test)
+shap_explainer = shap.TreeExplainer(rf)
+shap_values = shap_explainer.shap_values(X_test_transformed)[1]
+
+shap.summary_plot(shap_values, X_test_transformed, feature_names=X_test.columns)
+
+# Learning curves
+train_sizes, train_scores, test_scores = learning_curve(
+    model, X, y, cv=StratifiedKFold(n_splits=5), scoring="f1", train_sizes=np.linspace(0.1, 1.0, 10)
+)
+
+train_mean = np.mean(train_scores, axis=1)
+test_mean = np.mean(test_scores, axis=1)
+
+plt.figure()
+plt.plot(train_sizes, train_mean, label="Training F1")
+plt.plot(train_sizes, test_mean, label="Validation F1")
+plt.xlabel("Training Set Size")
+plt.ylabel("F1 Score")
+plt.title("Learning Curves")
+plt.legend()
+plt.show()

@@ -10,7 +10,7 @@ from sklearn.utils import resample
 from scipy.stats import sem
 import numpy as np
 import seaborn as sns
-from sklearn.impute import SimpleImputer
+from sklearn.impute import SimpleImputer, MissingIndicator
 from sklearn.pipeline import Pipeline
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import MissingIndicator
@@ -197,13 +197,9 @@ X_train, X_test, y_train, y_test = train_test_split(
     X, y, test_size=0.2, random_state=42
 )
 
-missing_indicator = MissingIndicator(features="missing-only")
-imputer = SimpleImputer(strategy="most_frequent")
-
 preprocessor = ColumnTransformer(
     transformers=[
-        ("missing_indicator", missing_indicator, cdr_columns),
-        ("imputer", imputer, cdr_columns),
+        ("num", SimpleImputer(strategy="most_frequent"), cdr_columns),
     ],
     remainder="passthrough",
 )
@@ -238,8 +234,7 @@ def train_and_evaluate_logistic_regression(penalty):
 
 
 def plot_learning_performance(pipeline, X_train, y_train, penalty):
-    """ learning performance of the logistic regression without regularisation (mean + 95% CI)
- """
+    """learning performance of the logistic regression without regularisation (mean + 95% CI)"""
     train_sizes, train_scores, test_scores = learning_curve(
         pipeline, X_train, y_train, train_sizes=np.linspace(0.1, 1.0, 10), cv=5
     )
@@ -285,6 +280,8 @@ def plot_learning_performance(pipeline, X_train, y_train, penalty):
     plt.title(f"Learning Performance ({penalty})")
     plt.legend(loc="best")
     plt.savefig(f"results/t2_learning_performance_{penalty}.png")
-    plt.show()
+    # plt.show()
+
+
 train_and_evaluate_logistic_regression("l1")
 train_and_evaluate_logistic_regression("l2")
