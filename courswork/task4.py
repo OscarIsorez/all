@@ -12,7 +12,6 @@ from keras_tuner import RandomSearch
 
 # Step 1: Data Loading
 def load_data(file_path):
-    # .fa file
     data = pd.read_csv(file_path, delimiter=" ", header=None)
 
     data.columns = [

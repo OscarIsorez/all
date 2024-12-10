@@ -2,11 +2,12 @@ import lzma
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 from Bio.Align import PairwiseAligner
+import igraph
 import networkx as nx
 import numpy as np
 import matplotlib.pyplot as plt
-from sklearn.cluster import DBSCAN, AgglomerativeClustering
 from sklearn.metrics import silhouette_score
+import seaborn as sns
 
 
 # Load protein sequences
@@ -41,68 +42,43 @@ for i in range(n):
         max_len = max(len(sequences[i].seq), len(sequences[j].seq))
         dist_matrix[i, j] = 1 - (score / max_len)
         dist_matrix[j, i] = dist_matrix[i, j]
+# Define a similarity threshold
 
 
-plot = plt.imshow(dist_matrix, cmap="viridis")
-plt.colorbar(plot)
-plt.title("Sequence Similarity Matrix")
-plt.savefig("results/t1_matrix.png", dpi=250, bbox_inches="tight")
+# Seuil pour la similarité
+threshold = 0.5
 
-cutoff = 0.4
-G = nx.Graph()
+# Créer une liste d'arêtes à partir de la matrice de distances
+edges = []
+for i in range(len(dist_matrix)):
+    for j in range(i + 1, len(dist_matrix)):  # Triangle supérieur
+        if dist_matrix[i, j] <= threshold:
+            edges.append((i, j))
 
-for i in range(n):
-    for j in range(i + 1, n):
-        if dist_matrix[i, j] <= cutoff:
-            G.add_edge(i, j)
+# Créer le graphe avec igraph
+graph = igraph.Graph(edges=edges, directed=False)
+graph.vs["name"] = [f"Seq {i}" for i in range(len(dist_matrix))]
 
-print(
-    f"Generated network with {G.number_of_nodes()} nodes and {G.number_of_edges()} edges."
+# Analyse de la topologie du réseau
+print("Diamètre du graphe :", graph.diameter())
+print("Rayon :", graph.radius())
+print("Longueur moyenne des chemins :", graph.average_path_length())
+print("Densité :", graph.density())
+print("Distribution des degrés :", graph.degree_distribution())
+print("Coefficient de clustering moyen :", graph.transitivity_avglocal_undirected())
+print("Coefficient de clustering global :", graph.transitivity_undirected())
+
+# Détection de communautés
+clusters = graph.community_infomap()
+print("Communautés détectées :", clusters.membership)
+
+# Ajout de couleurs aux communautés
+palette = sns.color_palette("husl", len(clusters))
+colours = [palette[clusters.membership[v]] for v in graph.vs.indices]
+graph.vs["color"] = [tuple(int(255 * c) for c in color) for color in colours]
+
+# Visualisation du graphe
+layout = graph.layout("fr")  # Force-directed layout
+igraph.plot(
+    graph, "sequence_similarity_network.png", layout=layout, bbox=(1280, 960), margin=50
 )
-
-
-degrees = [val for (node, val) in G.degree()]
-avg_clustering = nx.average_clustering(G)
-
-print(f"Average Degree: {np.mean(degrees):.2f}")
-print(f"Average Clustering Coefficient: {avg_clustering:.2f}")
-
-
-dbscan = DBSCAN(eps=0.4, min_samples=4, metric="precomputed")
-labels = dbscan.fit_predict(dist_matrix)
-unique_labels = np.unique(labels)
-print(f"Unique labels after parameter adjustment: {unique_labels}")
-
-if len(unique_labels) > 1:
-    silhouette = silhouette_score(dist_matrix, labels, metric="precomputed")
-    print(f"DBSCAN Silhouette Score: {silhouette:.2f}")
-else:
-    print("DBSCAN did not find more than one cluster.")
-
-# Try Agglomerative Clustering
-agglo = AgglomerativeClustering(n_clusters=3, metric="precomputed", linkage="average")
-labels = agglo.fit_predict(dist_matrix)
-silhouette = silhouette_score(dist_matrix, labels, metric="precomputed")
-print(f"Agglomerative Clustering Silhouette Score: {silhouette:.2f}")
-
-
-pos = nx.spring_layout(G, seed=42)
-colors = [labels[node] if node < len(labels) else -1 for node in G.nodes]
-
-plt.figure(figsize=(12, 12))
-nx.draw(G, pos, node_color=colors, with_labels=False, cmap=plt.cm.rainbow, node_size=50)
-plt.title("Sequence Similarity Network")
-plt.savefig("results/network.png", dpi=250, bbox_inches="tight")
-plt.show()
-
-# plot of a table with statistics of network topological properties
-plt.figure(figsize=(8, 4))
-plt.axis("off")
-plt.table(
-    cellText=[[f"Nodes: {G.number_of_nodes()}", f"Edges: {G.number_of_edges()}"]],
-    cellLoc="center",
-    loc="center",
-)
-plt.title("Network Statistics")
-plt.savefig("results/t1_network_stats.png", dpi=250, bbox_inches="tight")
-plt.show()
