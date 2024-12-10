@@ -14,9 +14,7 @@ from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline, make_pipeline
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.impute import SimpleImputer
-from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
-from sklearn.model_selection import StratifiedKFold
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import StratifiedKFold, train_test_split
 import matplotlib.pyplot as plt
 
 # Identification des colonnes
@@ -55,7 +53,7 @@ X_train, X_test, y_train, y_test = train_test_split(
     X, y, test_size=0.2, random_state=42
 )
 
-cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+cv = StratifiedKFold(n_splits=10, shuffle=True, random_state=127)
 
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import cross_val_score
@@ -65,7 +63,6 @@ log_reg_pipeline = make_pipeline(
     preprocessor, LogisticRegression(max_iter=1000, random_state=127)
 )
 
-cv = StratifiedKFold(n_splits=10, shuffle=True, random_state=127)
 log_reg_scores = cross_val_score(
     log_reg_pipeline, X_train, y_train, scoring="f1", cv=cv
 )
@@ -85,37 +82,60 @@ print("Gradient Boosting F1 Score:", gb_scores.mean())
 
 from sklearn.metrics import precision_recall_curve
 
-best_pipeline =  rf_pipeline if rf_scores.mean() > gb_scores.mean() else gb_pipeline
+# Sélection du meilleur pipeline
+if rf_scores.mean() > gb_scores.mean():
+    best_pipeline = rf_pipeline
+    feature_importance_attr = "feature_importances_"
+else:
+    best_pipeline = gb_pipeline
+    feature_importance_attr = "feature_importances_"
+
 best_pipeline.fit(X_train, y_train)
 y_pred = best_pipeline.predict(X_test)
 
 precision, recall, _ = precision_recall_curve(y_test, y_pred)
+plt.figure()
 plt.plot(recall, precision, marker=".")
 plt.xlabel("Recall")
 plt.ylabel("Precision")
 plt.savefig("results/t3_precision_recall_curve.png")
+plt.close()
 
-
-importances = best_pipeline.named_steps['gradientboostingclassifier'].feature_importances_
-features = preprocessor.transformers_[0][2] + preprocessor.transformers_[1][2]
-plt.barh(features, importances)
+# Importance des caractéristiques
+importances = getattr(
+    best_pipeline.named_steps[best_pipeline.steps[-1][0]], feature_importance_attr
+)
+feature_names = best_pipeline.named_steps["columntransformer"].get_feature_names_out()
+plt.figure(figsize=(10, 8))
+plt.barh(feature_names, importances)
+plt.xlabel("Importance")
+plt.ylabel("Feature")
 plt.savefig("results/t3_feature_importance.png")
-
+plt.close()
 
 from sklearn.model_selection import learning_curve
 
-train_sizes, train_scores, test_scores = learning_curve(best_pipeline, X, y, cv=cv, scoring="f1")
+train_sizes, train_scores, test_scores = learning_curve(
+    best_pipeline, X, y, cv=cv, scoring="f1"
+)
+plt.figure()
 plt.plot(train_sizes, train_scores.mean(axis=1), label="Train")
 plt.plot(train_sizes, test_scores.mean(axis=1), label="Test")
+plt.xlabel("Training Examples")
+plt.ylabel("F1 Score")
 plt.legend()
 plt.savefig("results/t3_learning_curve.png")
+plt.close()
 
 from sklearn.ensemble import StackingClassifier
 
-stacked_clf = StackingClassifier(estimators=[
-    ('rf', RandomForestClassifier(random_state=127)),
-    ('gb', GradientBoostingClassifier(random_state=127))
-], final_estimator=LogisticRegression())
+stacked_clf = StackingClassifier(
+    estimators=[
+        ("rf", RandomForestClassifier(random_state=127)),
+        ("gb", GradientBoostingClassifier(random_state=127)),
+    ],
+    final_estimator=LogisticRegression(),
+)
 
 stacked_scores = cross_val_score(stacked_clf, X_train, y_train, scoring="f1", cv=cv)
 print("Stacked Model F1 Score:", stacked_scores.mean())
@@ -126,7 +146,7 @@ inner_cv = StratifiedKFold(6, shuffle=True, random_state=128)
 
 from sklearn.model_selection import GridSearchCV
 
-params = {'randomforestclassifier__max_depth': [5, 10, None]}
+params = {"randomforestclassifier__max_depth": [5, 10, None]}
 grid = GridSearchCV(rf_pipeline, params, cv=inner_cv, scoring="f1")
 nested_scores = cross_val_score(grid, X, y, cv=outer_cv, scoring="f1")
 print("Nested CV Score:", nested_scores.mean())
