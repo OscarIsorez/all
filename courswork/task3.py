@@ -137,7 +137,9 @@ stacked_clf = StackingClassifier(
     final_estimator=LogisticRegression(),
 )
 
-stacked_scores = cross_val_score(stacked_clf, X_train, y_train, scoring="f1", cv=cv)
+pipeline = make_pipeline(preprocessor, stacked_clf)
+
+stacked_scores = cross_val_score(pipeline, X_train, y_train, scoring="f1", cv=cv)
 print("Stacked Model F1 Score:", stacked_scores.mean())
 
 
