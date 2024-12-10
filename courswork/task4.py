@@ -2,8 +2,8 @@ import pandas as pd
 import numpy as np
 import tensorflow as tf
 from keras.models import Sequential
-from keras.layers import Dense, Embedding, Conv1D, MaxPooling1D, Dropout, Flatten, LSTM
-from keras.preprocessing.sequence import pad_sequences
+from keras.layers import Embedding, Conv1D, MaxPooling1D, Dropout, Flatten, Dense
+
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 import matplotlib.pyplot as plt
@@ -29,12 +29,17 @@ def load_data(file_path):
         "Length",
         "Resolution",
     ]
-    sequences = {}  # Load sequences from a FASTA or similar file
-    # Example: Add your logic here to extract sequences from FASTA files.
+    sequences = {}
+
+    for line in open(file_path):
+        if line.startswith(">"):
+            domain_id = line.strip().split("|")[1]
+        else:
+            sequences[domain_id] = line.strip()
+
     return data, sequences
 
 
-# Step 2: Filter Top Categories
 def filter_top_categories(data, sequences, max_members=1000):
     counts = data["H"].value_counts()
     top_categories = counts[counts < max_members].head(5).index
@@ -43,7 +48,6 @@ def filter_top_categories(data, sequences, max_members=1000):
     return filtered[["sequence", "H"]].dropna()
 
 
-# Step 3: Preprocess Data
 def preprocess_data(dataset):
     # Tokenize sequences
     alphabet = set("".join(dataset["sequence"]))
