@@ -1,11 +1,13 @@
 import lzma
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
-from Bio import Align
-from Bio.Phylo.TreeConstruction import DistanceCalculator
-import pandas as pd
-import igraph
-import itertools
+from Bio.Align import PairwiseAligner
+import networkx as nx
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.cluster import DBSCAN, AgglomerativeClustering
+from sklearn.metrics import silhouette_score
+
 
 # Load protein sequences
 file_path = "data/sequences.txt.xz"
@@ -27,66 +29,80 @@ if not sequences:
 else:
     print(f"Loaded {len(sequences)} sequences.")
 
-# Compute pairwise distance matrix
-calculator = DistanceCalculator('identity')
-alignment_tool = Align.PairwiseAligner()
-alignment_tool.mode = 'global'
+aligner = PairwiseAligner()
+aligner.mode = "local"
 
-# Create the pairwise distance matrix with float data type
-num_sequences = len(sequences)
-distance_matrix = pd.DataFrame(0.0, index=range(num_sequences), columns=range(num_sequences))
+n = len(sequences)
+dist_matrix = np.zeros((n, n))
 
-for i, j in itertools.combinations(range(num_sequences), 2):
-    seq1 = str(sequences[i].seq)
-    seq2 = str(sequences[j].seq)
-    score = alignment_tool.score(seq1, seq2)
-    max_length = max(len(seq1), len(seq2))
-    identity = score / max_length
-    distance = 1 - identity
-    distance_matrix.iloc[i, j] = distance
-    distance_matrix.iloc[j, i] = distance
+for i in range(n):
+    for j in range(i + 1, n):
+        score = aligner.score(sequences[i].seq, sequences[j].seq)
+        max_len = max(len(sequences[i].seq), len(sequences[j].seq))
+        dist_matrix[i, j] = 1 - (score / max_len)
+        dist_matrix[j, i] = dist_matrix[i, j]
 
-# Threshold-based graph construction
-threshold = 0.1  # Set a similarity cutoff
-edges = [(i, j) for i, j in itertools.combinations(range(num_sequences), 2)
-         if distance_matrix.iloc[i, j] <= threshold]
 
-# Build the network graph
-graph = igraph.Graph(edges=edges, directed=False)
-graph.vs["label"] = [seq.id for seq in sequences]
+plot = plt.imshow(dist_matrix, cmap="viridis")
+plt.colorbar(plot)
+plt.title("Sequence Similarity Matrix")
+plt.savefig("results/t1_matrix.png", dpi=250, bbox_inches="tight")
 
-# Analyze network properties
-network_stats = {
-    "Diameter": graph.diameter(),
-    "Girth": graph.girth(),
-    "Radius": graph.radius(),
-    "Average Path Length": graph.average_path_length(),
-    "Density": graph.density(),
-    "Clustering Coefficient": graph.transitivity_avglocal_undirected(),
-    "Connected Components": len(graph.components())
-}
-print("Network Statistics:")
-print(pd.DataFrame([network_stats]))
+cutoff = 0.4
+G = nx.Graph()
 
-# Perform clustering
-clusters = graph.community_multilevel()
-graph.vs["membership"] = clusters.membership
+for i in range(n):
+    for j in range(i + 1, n):
+        if dist_matrix[i, j] <= cutoff:
+            G.add_edge(i, j)
 
-# Visualize the graph with clusters
-import seaborn as sns
+print(
+    f"Generated network with {G.number_of_nodes()} nodes and {G.number_of_edges()} edges."
+)
 
-cluster_colors = sns.color_palette("husl", len(clusters))
-graph.vs["color"] = [cluster_colors[m] for m in clusters.membership]
 
-layout = graph.layout("fr")
-igraph.plot(graph, "protein_network.png", layout=layout, bbox=(1280, 960))
+degrees = [val for (node, val) in G.degree()]
+avg_clustering = nx.average_clustering(G)
 
-# Save cluster information
-cluster_df = pd.DataFrame({
-    "Sequence ID": [seq.id for seq in sequences],
-    "Cluster": clusters.membership
-})
-cluster_df.to_csv("protein_clusters.csv", index=False)
+print(f"Average Degree: {np.mean(degrees):.2f}")
+print(f"Average Clustering Coefficient: {avg_clustering:.2f}")
 
-print("Clustering completed. Network visualization saved as 'protein_network.png'.")
-print("Cluster information saved as 'protein_clusters.csv'.")
+
+dbscan = DBSCAN(eps=0.4, min_samples=4, metric="precomputed")
+labels = dbscan.fit_predict(dist_matrix)
+unique_labels = np.unique(labels)
+print(f"Unique labels after parameter adjustment: {unique_labels}")
+
+if len(unique_labels) > 1:
+    silhouette = silhouette_score(dist_matrix, labels, metric="precomputed")
+    print(f"DBSCAN Silhouette Score: {silhouette:.2f}")
+else:
+    print("DBSCAN did not find more than one cluster.")
+
+# Try Agglomerative Clustering
+agglo = AgglomerativeClustering(n_clusters=3, metric="precomputed", linkage="average")
+labels = agglo.fit_predict(dist_matrix)
+silhouette = silhouette_score(dist_matrix, labels, metric="precomputed")
+print(f"Agglomerative Clustering Silhouette Score: {silhouette:.2f}")
+
+
+pos = nx.spring_layout(G, seed=42)
+colors = [labels[node] if node < len(labels) else -1 for node in G.nodes]
+
+plt.figure(figsize=(12, 12))
+nx.draw(G, pos, node_color=colors, with_labels=False, cmap=plt.cm.rainbow, node_size=50)
+plt.title("Sequence Similarity Network")
+plt.savefig("results/network.png", dpi=250, bbox_inches="tight")
+plt.show()
+
+# plot of a table with statistics of network topological properties
+plt.figure(figsize=(8, 4))
+plt.axis("off")
+plt.table(
+    cellText=[[f"Nodes: {G.number_of_nodes()}", f"Edges: {G.number_of_edges()}"]],
+    cellLoc="center",
+    loc="center",
+)
+plt.title("Network Statistics")
+plt.savefig("results/t1_network_stats.png", dpi=250, bbox_inches="tight")
+plt.show()
