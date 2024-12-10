@@ -1,6 +1,7 @@
 from matplotlib.ticker import FixedLocator
 import pandas as pd
 import matplotlib.pyplot as plt
+from sklearn import model_selection
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, classification_report
 from sklearn.model_selection import cross_val_score, learning_curve, train_test_split
@@ -14,8 +15,12 @@ from sklearn.impute import SimpleImputer, MissingIndicator
 from sklearn.pipeline import Pipeline
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import MissingIndicator
+import math
+from scipy import stats
+
 
 n = 4
+SEED = 42
 
 
 # def create_visits(n):
@@ -194,7 +199,7 @@ y = merged_data["cdr_visit1"]
 X = merged_data.drop(columns=["cdr_visit1", "ID"])
 
 X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=0.2, random_state=42
+    X, y, test_size=0.2, random_state=SEED
 )
 
 preprocessor = ColumnTransformer(
@@ -204,84 +209,37 @@ preprocessor = ColumnTransformer(
     remainder="passthrough",
 )
 
-log_reg = LogisticRegression(max_iter=10000, random_state=42)
+
+intervals = {}
+log_reg = LogisticRegression(max_iter=10000, random_state=SEED)
 
 pipeline = Pipeline(steps=[("preprocessor", preprocessor), ("classifier", log_reg)])
+cv = model_selection.StratifiedKFold(10, shuffle=True, random_state=SEED)
+scores = cross_val_score(pipeline, X_train, y_train, cv=cv, scoring="f1_macro")
 
-scores = cross_val_score(pipeline, X_train, y_train, cv=5, scoring="accuracy")
-
-mean_score = scores.mean()
-confidence_interval = sem(scores) * 1.96
-print(f"Mean accuracy: {mean_score:.2f} +/- {confidence_interval:.2f}")
-print(
-    f"95% confidence interval: {mean_score - confidence_interval:.2f} - {mean_score + confidence_interval:.2f}"
+mu, sigma, n = scores.mean(), scores.std(), len(scores)
+intervals["Logistic Regression"] = stats.t.interval(
+    0.95, loc=mu, scale=sigma / math.sqrt(n), df=n - 1
 )
 
 
 def train_and_evaluate_logistic_regression(penalty):
     log_reg = LogisticRegression(
-        max_iter=10000, random_state=42, solver="liblinear", penalty=penalty
+        max_iter=10000, random_state=SEED, solver="liblinear", penalty=penalty
     )
     pipeline = Pipeline(steps=[("preprocessor", preprocessor), ("classifier", log_reg)])
-    scores = cross_val_score(pipeline, X_train, y_train, cv=5, scoring="accuracy")
-    mean_score = scores.mean()
-    confidence_interval = sem(scores) * 1.96
-    print(f"Mean accuracy ({penalty}): {mean_score:.2f} +/- {confidence_interval:.2f}")
-    print(
-        f"95% confidence interval: {mean_score - confidence_interval:.2f} - {mean_score + confidence_interval:.2f}"
-    )
-    plot_learning_performance(pipeline, X_train, y_train, penalty)
+    cv = model_selection.StratifiedKFold(10, shuffle=True, random_state=SEED)
+    scores = cross_val_score(pipeline, X_train, y_train, cv=cv, scoring="f1_macro")
 
-
-def plot_learning_performance(pipeline, X_train, y_train, penalty):
-    """learning performance of the logistic regression without regularisation (mean + 95% CI)"""
-    train_sizes, train_scores, test_scores = learning_curve(
-        pipeline, X_train, y_train, train_sizes=np.linspace(0.1, 1.0, 10), cv=5
+    mu, sigma, n = scores.mean(), scores.std(), len(scores)
+    intervals[f"Logistic Regression ({penalty})"] = stats.t.interval(
+        0.95, loc=mu, scale=sigma / math.sqrt(n), df=n - 1
     )
-
-    train_scores_mean = np.mean(train_scores, axis=1)
-    train_scores_std = np.std(train_scores, axis=1)
-    test_scores_mean = np.mean(test_scores, axis=1)
-    test_scores_std = np.std(test_scores, axis=1)
-
-    plt.figure(figsize=(8, 6))
-    plt.fill_between(
-        train_sizes,
-        train_scores_mean - train_scores_std,
-        train_scores_mean + train_scores_std,
-        alpha=0.1,
-        color="r",
-    )
-    plt.fill_between(
-        train_sizes,
-        test_scores_mean - test_scores_std,
-        test_scores_mean + test_scores_std,
-        alpha=0.1,
-        color="g",
-    )
-    plt.plot(
-        train_sizes,
-        train_scores_mean,
-        color="r",
-        label="Training score",
-        marker="o",
-        linestyle="-",
-    )
-    plt.plot(
-        train_sizes,
-        test_scores_mean,
-        color="g",
-        label="Cross-validation score",
-        marker="o",
-        linestyle="-",
-    )
-    plt.xlabel("Training examples")
-    plt.ylabel("Accuracy")
-    plt.title(f"Learning Performance ({penalty})")
-    plt.legend(loc="best")
-    plt.savefig(f"results/t2_learning_performance_{penalty}.png")
-    # plt.show()
 
 
 train_and_evaluate_logistic_regression("l1")
 train_and_evaluate_logistic_regression("l2")
+
+# datafram with the confidence intervals
+intervals_df = pd.DataFrame(intervals).T
+print(intervals_df)
