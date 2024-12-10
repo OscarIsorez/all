@@ -10,20 +10,14 @@ data = appointments.merge(participants, on="participant")
 # Filtrer les patients avec au moins 5 rendez-vous
 data = data[data["count"] >= 5]
 
-
 from sklearn.compose import ColumnTransformer
-from sklearn.pipeline import Pipeline
+from sklearn.pipeline import Pipeline, make_pipeline
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.impute import SimpleImputer
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
-from sklearn.svm import SVC
-from sklearn.model_selection import GridSearchCV, StratifiedKFold
-from sklearn.pipeline import Pipeline
-from sklearn.metrics import precision_recall_curve, make_scorer, f1_score
+from sklearn.model_selection import StratifiedKFold
 from sklearn.model_selection import train_test_split
 import matplotlib.pyplot as plt
-from sklearn.metrics import PrecisionRecallDisplay
-
 
 # Identification des colonnes
 categorical_columns = [
@@ -33,7 +27,6 @@ categorical_columns = [
     "diabetes",
     "alcoholism",
     "weekday",
-    "status",
 ]
 numerical_columns = ["age", "advance", "day", "month", "count"]
 
@@ -55,10 +48,8 @@ preprocessor = ColumnTransformer(
     ]
 )
 
-
-X = data.drop(columns=["participant"])
+X = data.drop(columns=["status"], axis=1)
 y = data["status"].map({"fullfilled": 1, "no-show": 0})
-
 
 X_train, X_test, y_train, y_test = train_test_split(
     X, y, test_size=0.2, random_state=42
@@ -66,68 +57,76 @@ X_train, X_test, y_train, y_test = train_test_split(
 
 cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
 
+from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import cross_val_score
 
-models = {
-    "RandomForest": RandomForestClassifier(),
-    "GradientBoosting": GradientBoostingClassifier(),
-    "SVM": SVC(probability=True),
-}
+# Pipeline for Logistic Regression
+log_reg_pipeline = make_pipeline(
+    preprocessor, LogisticRegression(max_iter=1000, random_state=127)
+)
 
-param_grid = {
-    "RandomForest": {"model__n_estimators": [100, 200], "model__max_depth": [5, 10]},
-    "GradientBoosting": {
-        "model__n_estimators": [100, 200],
-        "model__learning_rate": [0.05, 0.1],
-    },
-    "SVM": {"model__C": [0.1, 1], "model__kernel": ["linear", "rbf"]},
-}
+cv = StratifiedKFold(n_splits=10, shuffle=True, random_state=127)
+log_reg_scores = cross_val_score(
+    log_reg_pipeline, X_train, y_train, scoring="f1", cv=cv
+)
+print("Logistic Regression F1 Score:", log_reg_scores.mean())
 
-best_estimators = {}
-for name, model in models.items():
-    pipeline = Pipeline(steps=[("preprocessor", preprocessor), ("model", model)])
-    grid_search = GridSearchCV(
-        pipeline, param_grid[name], cv=cv, scoring="f1", n_jobs=-1
-    )
-    grid_search.fit(X_train, y_train)
-    best_estimators[name] = grid_search.best_estimator_
+from sklearn.ensemble import RandomForestClassifier
 
-for name, estimator in best_estimators.items():
-    y_scores = estimator.predict_proba(X_test)[:, 1]
-    display = PrecisionRecallDisplay.from_predictions(y_test, y_scores)
-    display.ax_.set_title(f"Precision-Recall Curve: {name}")
-    plt.savefig(f"results/t3_precision_recall_cv_for{name}.png")
-    plt.show()
+rf_pipeline = make_pipeline(preprocessor, RandomForestClassifier(random_state=127))
+rf_scores = cross_val_score(rf_pipeline, X_train, y_train, scoring="f1", cv=cv)
+print("Random Forest F1 Score:", rf_scores.mean())
+
+from sklearn.ensemble import GradientBoostingClassifier
+
+gb_pipeline = make_pipeline(preprocessor, GradientBoostingClassifier(random_state=127))
+gb_scores = cross_val_score(gb_pipeline, X_train, y_train, scoring="f1", cv=cv)
+print("Gradient Boosting F1 Score:", gb_scores.mean())
+
+from sklearn.metrics import precision_recall_curve
+
+best_pipeline =  rf_pipeline if rf_scores.mean() > gb_scores.mean() else gb_pipeline
+best_pipeline.fit(X_train, y_train)
+y_pred = best_pipeline.predict(X_test)
+
+precision, recall, _ = precision_recall_curve(y_test, y_pred)
+plt.plot(recall, precision, marker=".")
+plt.xlabel("Recall")
+plt.ylabel("Precision")
+plt.savefig("results/t3_precision_recall_curve.png")
 
 
-import shap
-
-# SHAP
-explainer = shap.Explainer(best_estimators["GradientBoosting"].named_steps["model"])
-shap_values = explainer(X_test)
-shap.summary_plot(shap_values, X_test)
-
-from sklearn.ensemble import StackingClassifier
-
-stacked_model = StackingClassifier(estimators=[
-    ("rf", best_estimators["RandomForest"]),
-    ("gb", best_estimators["GradientBoosting"]),
-    ("svm", best_estimators["SVM"])
-], final_estimator=GradientBoostingClassifier())
-
-stacked_model.fit(X_train, y_train)
+importances = best_pipeline.named_steps['gradientboostingclassifier'].feature_importances_
+features = preprocessor.transformers_[0][2] + preprocessor.transformers_[1][2]
+plt.barh(features, importances)
+plt.savefig("results/t3_feature_importance.png")
 
 
 from sklearn.model_selection import learning_curve
 
-train_sizes, train_scores, test_scores = learning_curve(
-    best_estimators["GradientBoosting"], X_train, y_train, cv=cv, scoring="f1"
-)
-
+train_sizes, train_scores, test_scores = learning_curve(best_pipeline, X, y, cv=cv, scoring="f1")
 plt.plot(train_sizes, train_scores.mean(axis=1), label="Train")
 plt.plot(train_sizes, test_scores.mean(axis=1), label="Test")
 plt.legend()
-plt.xlabel("Training Set Size")
-plt.ylabel("F1 Score")
-plt.title("Learning Curve")
 plt.savefig("results/t3_learning_curve.png")
-plt.show()
+
+from sklearn.ensemble import StackingClassifier
+
+stacked_clf = StackingClassifier(estimators=[
+    ('rf', RandomForestClassifier(random_state=127)),
+    ('gb', GradientBoostingClassifier(random_state=127))
+], final_estimator=LogisticRegression())
+
+stacked_scores = cross_val_score(stacked_clf, X_train, y_train, scoring="f1", cv=cv)
+print("Stacked Model F1 Score:", stacked_scores.mean())
+
+
+outer_cv = StratifiedKFold(7, shuffle=True, random_state=127)
+inner_cv = StratifiedKFold(6, shuffle=True, random_state=128)
+
+from sklearn.model_selection import GridSearchCV
+
+params = {'randomforestclassifier__max_depth': [5, 10, None]}
+grid = GridSearchCV(rf_pipeline, params, cv=inner_cv, scoring="f1")
+nested_scores = cross_val_score(grid, X, y, cv=outer_cv, scoring="f1")
+print("Nested CV Score:", nested_scores.mean())
