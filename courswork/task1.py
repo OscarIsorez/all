@@ -2,12 +2,12 @@ import lzma
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 from Bio import Align
-import numpy as np
-import igraph as ig
-import matplotlib.pyplot as plt
+from Bio.Phylo.TreeConstruction import DistanceCalculator
 import pandas as pd
+import igraph
+import itertools
 
-# Extract the dataset
+# Load protein sequences
 file_path = "data/sequences.txt.xz"
 sequences = []
 
@@ -23,143 +23,70 @@ except Exception as e:
 
 if not sequences:
     print("No sequences loaded. Please check the file path and content.")
+    exit()
 else:
     print(f"Loaded {len(sequences)} sequences.")
 
-    # Initialize the aligner
-    aligner = Align.PairwiseAligner()
-    aligner.mode = "local"
+# Compute pairwise distance matrix
+calculator = DistanceCalculator('identity')
+alignment_tool = Align.PairwiseAligner()
+alignment_tool.mode = 'global'
 
-    # Compute the pairwise distance matrix
-    num_sequences = len(sequences)
-    distance_matrix = np.zeros((num_sequences, num_sequences))
+# Create the pairwise distance matrix with float data type
+num_sequences = len(sequences)
+distance_matrix = pd.DataFrame(0.0, index=range(num_sequences), columns=range(num_sequences))
 
-    for i in range(num_sequences):
-        for j in range(i + 1, num_sequences):
-            score = aligner.score(str(sequences[i].seq), str(sequences[j].seq))
-            distance_matrix[i, j] = distance_matrix[j, i] = score
+for i, j in itertools.combinations(range(num_sequences), 2):
+    seq1 = str(sequences[i].seq)
+    seq2 = str(sequences[j].seq)
+    score = alignment_tool.score(seq1, seq2)
+    max_length = max(len(seq1), len(seq2))
+    identity = score / max_length
+    distance = 1 - identity
+    distance_matrix.iloc[i, j] = distance
+    distance_matrix.iloc[j, i] = distance
 
-    print("Pairwise distance matrix computed.")
+# Threshold-based graph construction
+threshold = 0.1  # Set a similarity cutoff
+edges = [(i, j) for i, j in itertools.combinations(range(num_sequences), 2)
+         if distance_matrix.iloc[i, j] <= threshold]
 
-    # Create a DataFrame from the distance matrix
-    distance_df = pd.DataFrame(
-        distance_matrix,
-        index=[f"seq{i+1}" for i in range(num_sequences)],
-        columns=[f"seq{i+1}" for i in range(num_sequences)],
-    )
+# Build the network graph
+graph = igraph.Graph(edges=edges, directed=False)
+graph.vs["label"] = [seq.id for seq in sequences]
 
-    # Create a clustermap plot
-    sns.clustermap(distance_df, cmap="viridis", figsize=(10, 10))
-    plt.title("Clustermap of Sequence Similarities")
-    plt.savefig("results/t1_clustermap.png")
-    plt.show()
+# Analyze network properties
+network_stats = {
+    "Diameter": graph.diameter(),
+    "Girth": graph.girth(),
+    "Radius": graph.radius(),
+    "Average Path Length": graph.average_path_length(),
+    "Density": graph.density(),
+    "Clustering Coefficient": graph.transitivity_avglocal_undirected(),
+    "Connected Components": len(graph.components())
+}
+print("Network Statistics:")
+print(pd.DataFrame([network_stats]))
 
-    # Calculate the cutoff threshold based on the 80th percentile
-    upper_triangle_indices = np.triu_indices(num_sequences, k=1)
-    upper_triangle_values = distance_matrix[upper_triangle_indices]
-    cutoff_threshold = np.percentile(upper_triangle_values, 80)
-    print(f"Cutoff threshold (80th percentile): {cutoff_threshold}")
+# Perform clustering
+clusters = graph.community_multilevel()
+graph.vs["membership"] = clusters.membership
 
-    # Define edges based on the cutoff threshold
-    edges = [
-        (i, j)
-        for i in range(num_sequences)
-        for j in range(i + 1, num_sequences)
-        if distance_matrix[i, j] <= cutoff_threshold
-    ]
+# Visualize the graph with clusters
+import seaborn as sns
 
-    # Create the graph
-    graph = ig.Graph(edges=edges)
-    graph.vs["name"] = [record.id for record in sequences]
+cluster_colors = sns.color_palette("husl", len(clusters))
+graph.vs["color"] = [cluster_colors[m] for m in clusters.membership]
 
-    print(f"Graph created with {graph.vcount()} nodes and {graph.ecount()} edges.")
+layout = graph.layout("fr")
+igraph.plot(graph, "protein_network.png", layout=layout, bbox=(1280, 960))
 
-    # Visualize the network
-    layout = graph.layout("fr")  # Fruchterman-Reingold layout
-    fig, ax = plt.subplots(figsize=(10, 10))
-    ig.plot(
-        graph,
-        layout=layout,
-        target=ax,
-        vertex_label=None,
-        vertex_size=20,  # Adjusted vertex size
-        edge_width=0.5,
-        vertex_color="blue",
-        edge_color="gray",
-    )
-    plt.title("Network Visualization")
-    plt.savefig("results/t1_network_visualization.png")
-    plt.show()
+# Save cluster information
+cluster_df = pd.DataFrame({
+    "Sequence ID": [seq.id for seq in sequences],
+    "Cluster": clusters.membership
+})
+cluster_df.to_csv("protein_clusters.csv", index=False)
 
-    # Compute network statistics
-    statistics = {
-        "Number of Nodes": graph.vcount(),
-        "Number of Edges": graph.ecount(),
-        "Average Degree": sum(graph.degree()) / graph.vcount(),
-        "Clustering Coefficient": graph.transitivity_undirected(),
-        "Number of Components": len(graph.components()),
-    }
-    print(statistics)
-
-    # Create a DataFrame for the statistics
-    stats_df = pd.DataFrame(list(statistics.items()), columns=["Property", "Value"])
-    print(stats_df)
-
-    # Display the statistics as a table
-    fig, ax = plt.subplots(figsize=(8, 4))
-    ax.axis("tight")
-    ax.axis("off")
-    table = ax.table(
-        cellText=stats_df.values,
-        colLabels=stats_df.columns,
-        cellLoc="center",
-        loc="center",
-    )
-    table.auto_set_font_size(False)
-    table.set_fontsize(12)
-    table.scale(1.2, 1.2)
-    plt.title("Network Topological Properties")
-    plt.show()
-
-    # Detect communities
-    clusters = graph.community_multilevel()
-    graph.vs["cluster"] = clusters.membership
-
-    # Print cluster information
-    num_clusters = len(set(clusters.membership))
-    cluster_sizes = [clusters.membership.count(i) for i in range(num_clusters)]
-    print(f"Number of clusters: {num_clusters}")
-    print(f"Cluster sizes: {cluster_sizes}")
-
-    # Color the nodes based on cluster membership
-    palette = ig.drawing.colors.ClusterColoringPalette(num_clusters)
-    graph.vs["color"] = [palette[cluster] for cluster in clusters.membership]
-
-    # Visualize the network with clusters
-    fig, ax = plt.subplots(figsize=(10, 10))
-    ig.plot(
-        graph,
-        layout=layout,
-        target=ax,
-        vertex_label=None,
-        vertex_size=20,  # Adjusted vertex size
-        edge_width=0.5,
-        vertex_color=graph.vs["color"],
-        edge_color="gray",
-    )
-    plt.title("Network Visualization with Clusters")
-    plt.savefig("results/t1_network_visualization_with_clusters.png")
-    plt.show()
-
-    # Plot cluster sizes
-    fig, ax = plt.subplots(figsize=(10, 6))
-    ax.bar(
-        range(num_clusters),
-        cluster_sizes,
-        color=[palette[i] for i in range(num_clusters)],
-    )
-    ax.set_xlabel("Cluster")
-    ax.set_ylabel("Size")
-    ax.set_title("Cluster Sizes")
-    plt.savefig("results/t1_cluster_sizes.png")
-    plt.show()
+print("Clustering completed. Network visualization saved as 'protein_network.png'.")
+print("Cluster information saved as 'protein_clusters.csv'.")
