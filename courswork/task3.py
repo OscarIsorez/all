@@ -58,7 +58,8 @@ X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, stratif
 # Fit model
 model.fit(X_train, y_train)
 
-# Evaluate model
+
+
 y_pred = model.predict(X_test)
 print(classification_report(y_test, y_pred))
 
@@ -83,13 +84,15 @@ plt.ylabel("Actual")
 plt.xlabel("Predicted")
 plt.show()
 
-# Feature importance using SHAP
+
 rf = model.named_steps["classifier"]
 X_test_transformed = model.named_steps["preprocessor"].transform(X_test)
 shap_explainer = shap.TreeExplainer(rf)
 shap_values = shap_explainer.shap_values(X_test_transformed)[1]
 
 shap.summary_plot(shap_values, X_test_transformed, feature_names=X_test.columns)
+plt.savefig("results/t3_shap_summary_plot.png")
+
 
 # Learning curves
 train_sizes, train_scores, test_scores = learning_curve(
