@@ -184,7 +184,7 @@ def plot_disease_progression():
         ticks=range(len(visits)), labels=[f"Visit {i+1}" for i in range(len(visits))]
     )
     plt.xlabel("Visits")
-    plt.ylabel("Mean CDR Score")
+    plt.ylabel("mean CDR Score")
     plt.grid(True)
     plt.savefig("results/t2_disease_progression.png")
     # plt.show()
@@ -210,7 +210,7 @@ preprocessor = ColumnTransformer(
 )
 
 
-stats_dict = {"Mean": {}, "Intervals": {}}
+stats_dict = {"mean": {}, "intervals": {}}
 log_reg = LogisticRegression(max_iter=10000, random_state=SEED)
 
 pipeline = Pipeline(steps=[("preprocessor", preprocessor), ("classifier", log_reg)])
@@ -218,10 +218,12 @@ cv = model_selection.StratifiedKFold(10, shuffle=True, random_state=SEED)
 scores = cross_val_score(pipeline, X_train, y_train, cv=cv, scoring="f1_macro")
 
 mu, sigma, n = scores.mean(), scores.std(), len(scores)
-stats_dict["Mean"] = {"Logistic Regression": mu}
-stats_dict["Intervals"]["Logistic Regression"] = stats.t.interval(
-    0.95, loc=mu, scale=sigma / math.sqrt(n), df=n - 1
-)
+stats_dict["mean"] = {"Logistic Regression": mu}
+stats_dict["intervals"] = {
+    "Logistic Regression": list(
+        stats.t.interval(0.95, loc=mu, scale=sigma / math.sqrt(n), df=n - 1)
+    )
+}
 
 
 def train_and_evaluate_logistic_regression(penalty):
@@ -233,15 +235,13 @@ def train_and_evaluate_logistic_regression(penalty):
     scores = cross_val_score(pipeline, X_train, y_train, cv=cv, scoring="f1_macro")
 
     mu, sigma, n = scores.mean(), scores.std(), len(scores)
-    stats_dict["Intervals"][f"Logistic Regression ({penalty})"] = stats.t.interval(
-        0.95, loc=mu, scale=sigma / math.sqrt(n), df=n - 1
-    )
-    stats_dict["Mean"][f"Logistic Regression ({penalty})"] = mu
+    stats_dict["intervals"] = {
+        f"Logistic Regression ({penalty})": list(
+            stats.t.interval(0.95, loc=mu, scale=sigma / math.sqrt(n), df=n - 1)
+        )
+    }
+    stats_dict["mean"] = {f"Logistic Regression ({penalty})": mu}
 
 
 train_and_evaluate_logistic_regression("l1")
 train_and_evaluate_logistic_regression("l2")
-
-# datafram
-df = pd.DataFrame(stats_dict).T
-df.to_csv("results/t2_logistic_regression_results.csv")

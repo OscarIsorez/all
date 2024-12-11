@@ -7,7 +7,7 @@ data = pd.read_pickle("processed/heart.pkl.gz")
 # Prétraitement
 data["sex"] = data["sex"].map({"M": 1, "F": 0})
 x = data.drop(columns=["time"])
-y = data["time"]  # La durée avant le décès (notre cible)
+y = data["time"]  
 
 # Division en ensembles d'entraînement et de test
 x_train, x_test, y_train, y_test = train_test_split(

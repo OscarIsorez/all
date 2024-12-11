@@ -80,5 +80,9 @@ graph.vs["color"] = [tuple(int(255 * c) for c in color) for color in colours]
 # Visualisation du graphe
 layout = graph.layout("fr")  # Force-directed layout
 igraph.plot(
-    graph, "sequence_similarity_network.png", layout=layout, bbox=(1280, 960), margin=50
+    graph,
+    "results/sequence_similarity_network.png",
+    layout=layout,
+    bbox=(1280, 960),
+    margin=50,
 )
