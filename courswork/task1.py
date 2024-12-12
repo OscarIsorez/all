@@ -3,12 +3,11 @@ from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 from Bio.Align import PairwiseAligner
 import igraph
-import networkx as nx
 import numpy as np
 import matplotlib.pyplot as plt
+import pandas as pd
 from sklearn.metrics import silhouette_score
 import seaborn as sns
-
 
 # Load protein sequences
 file_path = "data/sequences.txt.xz"
@@ -42,8 +41,6 @@ for i in range(n):
         max_len = max(len(sequences[i].seq), len(sequences[j].seq))
         dist_matrix[i, j] = 1 - (score / max_len)
         dist_matrix[j, i] = dist_matrix[i, j]
-# Define a similarity threshold
-
 
 # Threshold for similarity
 threshold = 0.45
@@ -55,33 +52,43 @@ for i in range(len(dist_matrix)):
     for j in range(i + 1, len(dist_matrix)):
         if dist_matrix[i, j] <= threshold:
             edges.append((i, j))
-            # Weight is inverse of distance for better visualization
             weights.append(1 - dist_matrix[i, j])
 
 # Create the graph
 graph = igraph.Graph(edges=edges, directed=False)
 graph.vs["name"] = [f"Seq {i}" for i in range(len(dist_matrix))]
 
+# Perform clustering using Louvain method
+clusters = graph.community_multilevel()
+graph.vs["cluster"] = clusters.membership
+
+# Assign colors based on cluster membership
+num_clusters = len(clusters)
+palette = sns.color_palette("hsv", num_clusters)
+node_colors = [palette[cluster] for cluster in graph.vs["cluster"]]
+graph.vs["color"] = [palette[cluster] for cluster in graph.vs["cluster"]]
+
 # Set edge attributes
-graph.es["width"] = [5 * weight for weight in weights]  # Scale width for visualization
+graph.es["width"] = [8 * weight for weight in weights]  # Scale width for visualization
 
 # Circular layout
 layout = graph.layout("circle")
 
-# Visualization with edge widths based on distance
+# Visualization with colored nodes based on clusters
 igraph.plot(
     graph,
-    "results/t1_circular_similarity_network.png",
+    "results/t1_clustered_network.png",
     layout=layout,
-    bbox=(1920, 1440),  # Increased size
-    margin=40,  # Increased margin
+    bbox=(1920, 1440),
+    margin=40,
     vertex_label=[name[-3:] for name in graph.vs["name"]],
-    vertex_size=20,  # Increased vertex size
-    vertex_color="red",
+    vertex_size=20,
+    vertex_color=graph.vs["color"],
     edge_width=graph.es["width"],
     edge_color="gray",
 )
-# Calculate network topology metrics
+
+# Network topology metrics
 diameter = graph.diameter()
 girth = graph.girth() if graph.girth() != float("inf") else "Infinity"
 radius = graph.radius()
@@ -109,18 +116,15 @@ metrics = {
     "Global Clustering Coefficient": clustering_coeff_global,
     "Density": density,
 }
-print("Network topology metrics:" + "\n")
+
+print("Network topology metrics:\n")
 for metric, value in metrics.items():
     print(f"{metric}: {value}")
 
 # Create a DataFrame for the metrics
-import pandas as pd
-
 metrics_df = pd.DataFrame.from_dict(metrics, orient="index", columns=["Value"])
 
 # Plot the metrics table
-import matplotlib.pyplot as plt
-
 fig, ax = plt.subplots(figsize=(6, len(metrics) * 0.4))
 ax.axis("tight")
 ax.axis("off")
@@ -133,5 +137,5 @@ table = ax.table(
 )
 table.scale(1, 1.5)
 plt.tight_layout()
-plt.savefig("results/network_topology_metrics.png")
+plt.savefig("results/t1_network_topology_metrics.png")
 plt.close()
