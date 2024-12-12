@@ -1,4 +1,11 @@
 import pandas as pd
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline, make_pipeline
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
+from sklearn.impute import SimpleImputer
+from sklearn.model_selection import StratifiedKFold, train_test_split
+import matplotlib.pyplot as plt
+from sklearn.metrics import confusion_matrix
 
 appointments = pd.read_csv("data/appointments/appointments.txt", sep=r"\s+")
 participants = pd.read_csv("data/appointments/participants.txt", sep=r"\s+")
@@ -7,12 +14,6 @@ data = appointments.merge(participants, on="participant")
 
 data = data[data["count"] >= 5]
 
-from sklearn.compose import ColumnTransformer
-from sklearn.pipeline import Pipeline, make_pipeline
-from sklearn.preprocessing import StandardScaler, OneHotEncoder
-from sklearn.impute import SimpleImputer
-from sklearn.model_selection import StratifiedKFold, train_test_split
-import matplotlib.pyplot as plt
 
 categorical_columns = [
     "sms_received",
@@ -145,3 +146,15 @@ params = {"randomforestclassifier__max_depth": [5, 10, None]}
 grid = GridSearchCV(rf_pipeline, params, cv=inner_cv, scoring="f1")
 nested_scores = cross_val_score(grid, X, y, cv=outer_cv, scoring="f1")
 print("Nested CV Score:", nested_scores.mean())
+
+from sklearn.model_selection import cross_val_predict
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
+
+y_pred = cross_val_predict(best_pipeline, X, y, cv=cv)
+
+cm = confusion_matrix(y, y_pred)
+
+disp = ConfusionMatrixDisplay(confusion_matrix=cm)
+disp.plot()
+plt.savefig("results/t3_confusion_matrix.png")
+plt.close()
