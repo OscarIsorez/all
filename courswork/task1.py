@@ -9,7 +9,6 @@ import pandas as pd
 from sklearn.metrics import silhouette_score
 import seaborn as sns
 
-# Load protein sequences
 file_path = "data/sequences.txt.xz"
 sequences = []
 
@@ -42,10 +41,8 @@ for i in range(n):
         dist_matrix[i, j] = 1 - (score / max_len)
         dist_matrix[j, i] = dist_matrix[i, j]
 
-# Threshold for similarity
 threshold = 0.45
 
-# Create edge list with weights (based on distances)
 edges = []
 weights = []
 for i in range(len(dist_matrix)):
@@ -54,27 +51,21 @@ for i in range(len(dist_matrix)):
             edges.append((i, j))
             weights.append(1 - dist_matrix[i, j])
 
-# Create the graph
 graph = igraph.Graph(edges=edges, directed=False)
 graph.vs["name"] = [f"Seq {i}" for i in range(len(dist_matrix))]
 
-# Perform clustering using Louvain method
 clusters = graph.community_multilevel()
 graph.vs["cluster"] = clusters.membership
 
-# Assign colors based on cluster membership
 num_clusters = len(clusters)
 palette = sns.color_palette("hsv", num_clusters)
 node_colors = [palette[cluster] for cluster in graph.vs["cluster"]]
 graph.vs["color"] = [palette[cluster] for cluster in graph.vs["cluster"]]
 
-# Set edge attributes
 graph.es["width"] = [8 * weight for weight in weights]  # Scale width for visualization
 
-# Circular layout
 layout = graph.layout("circle")
 
-# Visualization with colored nodes based on clusters
 igraph.plot(
     graph,
     "results/t1_clustered_network.png",
@@ -88,7 +79,6 @@ igraph.plot(
     edge_color="gray",
 )
 
-# Network topology metrics
 diameter = graph.diameter()
 girth = graph.girth() if graph.girth() != float("inf") else "Infinity"
 radius = graph.radius()
@@ -98,12 +88,10 @@ assortativity = graph.assortativity_degree()
 clustering_coeff_avg = graph.transitivity_avglocal_undirected()
 clustering_coeff_global = graph.transitivity_undirected()
 
-# Degree statistics
 degrees = graph.degree()
 avg_degree = np.mean(degrees)
 degree_std = np.std(degrees)
 
-# Prepare metrics for the table
 metrics = {
     "Diameter": diameter,
     "Girth": girth,
@@ -121,10 +109,8 @@ print("Network topology metrics:\n")
 for metric, value in metrics.items():
     print(f"{metric}: {value}")
 
-# Create a DataFrame for the metrics
 metrics_df = pd.DataFrame.from_dict(metrics, orient="index", columns=["Value"])
 
-# Plot the metrics table
 fig, ax = plt.subplots(figsize=(6, len(metrics) * 0.4))
 ax.axis("tight")
 ax.axis("off")
