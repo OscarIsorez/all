@@ -1,13 +1,10 @@
 import pandas as pd
 
-# Chargement des fichiers
 appointments = pd.read_csv("data/appointments/appointments.txt", sep=r"\s+")
 participants = pd.read_csv("data/appointments/participants.txt", sep=r"\s+")
 
-# Fusionner les deux fichiers
 data = appointments.merge(participants, on="participant")
 
-# Filtrer les patients avec au moins 5 rendez-vous
 data = data[data["count"] >= 5]
 
 from sklearn.compose import ColumnTransformer
@@ -17,7 +14,6 @@ from sklearn.impute import SimpleImputer
 from sklearn.model_selection import StratifiedKFold, train_test_split
 import matplotlib.pyplot as plt
 
-# Identification des colonnes
 categorical_columns = [
     "sms_received",
     "sex",
@@ -58,7 +54,6 @@ cv = StratifiedKFold(n_splits=10, shuffle=True, random_state=127)
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import cross_val_score
 
-# Pipeline for Logistic Regression
 log_reg_pipeline = make_pipeline(
     preprocessor, LogisticRegression(max_iter=1000, random_state=127)
 )
@@ -82,7 +77,6 @@ print("Gradient Boosting F1 Score:", gb_scores.mean())
 
 from sklearn.metrics import precision_recall_curve
 
-# Sélection du meilleur pipeline
 if rf_scores.mean() > gb_scores.mean():
     best_pipeline = rf_pipeline
     feature_importance_attr = "feature_importances_"
@@ -101,7 +95,6 @@ plt.ylabel("Precision")
 plt.savefig("results/t3_precision_recall_curve.png")
 plt.close()
 
-# Importance des caractéristiques
 importances = getattr(
     best_pipeline.named_steps[best_pipeline.steps[-1][0]], feature_importance_attr
 )

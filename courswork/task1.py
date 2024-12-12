@@ -62,7 +62,7 @@ palette = sns.color_palette("hsv", num_clusters)
 node_colors = [palette[cluster] for cluster in graph.vs["cluster"]]
 graph.vs["color"] = [palette[cluster] for cluster in graph.vs["cluster"]]
 
-graph.es["width"] = [8 * weight for weight in weights]  # Scale width for visualization
+graph.es["width"] = [8 * weight for weight in weights]  
 
 layout = graph.layout("circle")
 

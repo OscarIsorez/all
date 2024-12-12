@@ -30,7 +30,6 @@ SEED = 42
 # visits  = [f"visit{i}" for i in range(1, n+1) ]
 
 
-# Load the data
 visit1 = pd.read_csv("data/visits/visits/visit-1.csv")
 visit2 = pd.read_csv("data/visits/visits/visit-2.csv")
 visit3 = pd.read_csv("data/visits/visits/visit-3.csv")
