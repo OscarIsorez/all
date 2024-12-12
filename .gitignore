@@ -8,4 +8,8 @@
 *.json
 *.xlsx
 *.fa
+*.fasta
+*.jpeg
+*.pdf
+*DS_Store
 
